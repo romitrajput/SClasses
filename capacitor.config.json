@@ -1,6 +1,6 @@
 {
   "appId": "in.sarojclasses.app",
-  "appName": "Saroj Classes",
+  "appName": "MyTution",
   "webDir": "www",
   "android": {
     "allowMixedContent": false
