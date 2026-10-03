@@ -1,0 +1,56 @@
+name: Build Android APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install dependencies
+        run: npm install
+      - name: Add Android platform
+        run: npx cap add android
+      - name: Sync web app into Android project
+        run: npx cap sync android
+      - name: Create app icon and splash screen from the MyTution logo
+        continue-on-error: true
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y librsvg2-bin
+          mkdir -p icon-build
+          rsvg-convert -w 1024 -h 1024 assets/icon-only.svg -o icon-build/icon-only.png
+          rsvg-convert -w 1024 -h 1024 assets/icon-foreground.svg -o icon-build/icon-foreground.png
+          rsvg-convert -w 1024 -h 1024 assets/icon-background.svg -o icon-build/icon-background.png
+          rsvg-convert -w 2732 -h 2732 assets/splash.svg -o icon-build/splash.png
+          npm install --no-save @capacitor/assets
+          npx capacitor-assets generate --android --assetPath icon-build
+      - name: Allow notifications permission on Android 13+
+        run: |
+          f=android/app/src/main/AndroidManifest.xml
+          grep -q POST_NOTIFICATIONS $f || sed -i 's#</manifest>#    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n</manifest>#' $f
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+      - name: Rename APK to MyTution.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk MyTution.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyTution-apk
+          path: MyTution.apk
+      - name: Publish MyTution.apk as a direct-download release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest MyTution.apk --target ${{ github.sha }} --title "MyTution (latest build)" --notes "Download MyTution.apk below and install it on your Android phone."
